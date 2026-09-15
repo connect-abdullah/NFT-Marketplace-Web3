@@ -1,0 +1,28 @@
+{
+  "name": "nft_contract_backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy": "tsx scripts/deploy.ts",
+    "cli": "tsx scripts/cli.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^7.0.0",
+    "@types/node": "^22.20.1",
+    "dotenv": "^17.4.2",
+    "hardhat": "^3.15.0",
+    "tsx": "^4.23.13",
+    "typescript": "~6.0.3"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.6.1",
+    "ethers": "^6.15.0"
+  }
+}
