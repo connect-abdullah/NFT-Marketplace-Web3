@@ -19,7 +19,7 @@ if ! curl -sS -m 2 -X POST "${RPC_URL}" \
   exit 1
 fi
 
-echo "Compiling and deploying MyNft..."
+echo "Compiling and deploying MarketNFT + NFTMarketplace..."
 cd "${ROOT}/backend"
 npm run compile
 npm run deploy

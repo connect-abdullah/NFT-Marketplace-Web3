@@ -10,27 +10,39 @@ export const repoRoot = path.resolve(backendRoot, "..");
 export const repoEnvPath = path.join(repoRoot, ".env");
 export const backendEnvPath = path.join(backendRoot, ".env");
 export const frontendEnvPath = path.join(repoRoot, "frontend", ".env.local");
-export const artifactPath = path.join(
+export const nftArtifactPath = path.join(
   backendRoot,
-  "artifacts/contracts/MyNft.sol/MyNft.json"
+  "artifacts/contracts/MarketNFT.sol/MarketNFT.json"
+);
+export const marketArtifactPath = path.join(
+  backendRoot,
+  "artifacts/contracts/NFTMarketplace.sol/NFTMarketplace.json"
 );
 
 dotenv.config({ path: repoEnvPath, quiet: true });
 dotenv.config({ path: backendEnvPath, quiet: true });
 
-export type NftArtifact = {
+export type ContractArtifact = {
   abi: InterfaceAbi;
   bytecode: string;
 };
 
-export function loadArtifact(): NftArtifact {
+function loadArtifact(artifactPath: string, label: string): ContractArtifact {
   if (!fs.existsSync(artifactPath)) {
     throw new Error(
-      `Artifact not found at ${artifactPath}. Run \`npm run compile\` from backend/ first.`
+      `Artifact not found at ${artifactPath}. Run \`npm run compile\` from backend/ first. (${label})`
     );
   }
 
-  return JSON.parse(fs.readFileSync(artifactPath, "utf-8")) as NftArtifact;
+  return JSON.parse(fs.readFileSync(artifactPath, "utf-8")) as ContractArtifact;
+}
+
+export function loadNftArtifact(): ContractArtifact {
+  return loadArtifact(nftArtifactPath, "MarketNFT");
+}
+
+export function loadMarketArtifact(): ContractArtifact {
+  return loadArtifact(marketArtifactPath, "NFTMarketplace");
 }
 
 export function requireEnv(name: string): string {
@@ -56,7 +68,12 @@ export function createWallets(provider: ethers.JsonRpcProvider): {
 }
 
 export function attachNft(address: string, signer: Wallet): Contract {
-  const { abi } = loadArtifact();
+  const { abi } = loadNftArtifact();
+  return new ethers.Contract(address, abi, signer);
+}
+
+export function attachMarket(address: string, signer: Wallet): Contract {
+  const { abi } = loadMarketArtifact();
   return new ethers.Contract(address, abi, signer);
 }
 
@@ -79,30 +96,75 @@ export function upsertEnv(key: string, value: string, envPath: string) {
   process.env[key] = value;
 }
 
-export function saveContractAddress(address: string) {
+function upsertBackendEnv(key: string, value: string) {
   if (fs.existsSync(repoEnvPath)) {
-    upsertEnv("CONTRACT_ADDRESS", address, repoEnvPath);
+    upsertEnv(key, value, repoEnvPath);
   }
   if (fs.existsSync(backendEnvPath)) {
-    upsertEnv("CONTRACT_ADDRESS", address, backendEnvPath);
+    upsertEnv(key, value, backendEnvPath);
   }
   if (!fs.existsSync(repoEnvPath) && !fs.existsSync(backendEnvPath)) {
-    upsertEnv("CONTRACT_ADDRESS", address, backendEnvPath);
+    upsertEnv(key, value, backendEnvPath);
   }
+}
+
+export function saveDeployedAddresses(nftAddress: string, marketAddress: string) {
+  upsertBackendEnv("NFT_ADDRESS", nftAddress);
+  upsertBackendEnv("MARKET_ADDRESS", marketAddress);
 
   const rpc = process.env.RPC_URL ?? "http://127.0.0.1:8545";
-  upsertEnv("NEXT_PUBLIC_CONTRACT_ADDRESS", address, frontendEnvPath);
+  upsertEnv("NEXT_PUBLIC_NFT_ADDRESS", nftAddress, frontendEnvPath);
+  upsertEnv("NEXT_PUBLIC_MARKET_ADDRESS", marketAddress, frontendEnvPath);
   upsertEnv("NEXT_PUBLIC_RPC_URL", rpc, frontendEnvPath);
 }
 
-export async function deployNft(wallet: Wallet): Promise<Contract> {
-  const artifact = loadArtifact();
-  const factory = new ethers.ContractFactory(artifact.abi, artifact.bytecode, wallet);
-  const contract = await factory.deploy();
-  await contract.waitForDeployment();
-  const address = await contract.getAddress();
-  saveContractAddress(address);
-  return contract;
+async function deployWithExplicitNonce(
+  factory: ethers.ContractFactory,
+  nonce: number,
+  ...args: unknown[]
+): Promise<{ contract: Contract; nextNonce: number }> {
+  const contract = await factory.deploy(...args, { nonce });
+  const deployTx = contract.deploymentTransaction();
+  if (!deployTx) {
+    throw new Error("Deployment transaction was not created");
+  }
+  await deployTx.wait(1);
+  return { contract, nextNonce: nonce + 1 };
+}
+
+export async function deployContracts(wallet: Wallet): Promise<{
+  nft: Contract;
+  market: Contract;
+}> {
+  let nonce = await wallet.getNonce("pending");
+
+  const nftArtifact = loadNftArtifact();
+  const nftFactory = new ethers.ContractFactory(
+    nftArtifact.abi,
+    nftArtifact.bytecode,
+    wallet
+  );
+  const nftDeploy = await deployWithExplicitNonce(nftFactory, nonce);
+  nonce = nftDeploy.nextNonce;
+  const nft = nftDeploy.contract;
+  const nftAddress = await nft.getAddress();
+
+  const marketArtifact = loadMarketArtifact();
+  const marketFactory = new ethers.ContractFactory(
+    marketArtifact.abi,
+    marketArtifact.bytecode,
+    wallet
+  );
+  const marketDeploy = await deployWithExplicitNonce(
+    marketFactory,
+    nonce,
+    nftAddress
+  );
+  const market = marketDeploy.contract;
+  const marketAddress = await market.getAddress();
+
+  saveDeployedAddresses(nftAddress, marketAddress);
+  return { nft, market };
 }
 
 export function tokenIdFromMintReceipt(
@@ -115,7 +177,10 @@ export function tokenIdFromMintReceipt(
         topics: [...log.topics],
         data: log.data,
       });
-      if (parsed?.name === "Transfer") {
+      if (
+        parsed?.name === "Transfer" &&
+        parsed.args.from === ethers.ZeroAddress
+      ) {
         return parsed.args.tokenId.toString();
       }
     } catch {

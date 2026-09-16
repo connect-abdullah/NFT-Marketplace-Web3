@@ -51,7 +51,7 @@ export function ConnectWallet() {
 
   if (isConnected && address) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <Badge variant="secondary" className="font-mono text-xs">
           {shortenAddress(address)}
         </Badge>

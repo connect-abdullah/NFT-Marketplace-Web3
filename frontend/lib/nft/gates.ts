@@ -1,9 +1,14 @@
 import type { Address } from "viem";
 import { targetChain } from "@/lib/wagmi";
-import { contractAddress } from "@/lib/nft/contract";
+import { marketAddress } from "@/lib/market/contract";
+import { nftAddress } from "@/lib/nft/contract";
 
 export function isOnTargetChain(chainId: number | undefined) {
   return chainId === targetChain.id;
+}
+
+export function contractsConfigured() {
+  return Boolean(nftAddress && marketAddress);
 }
 
 export function canWrite(params: {
@@ -11,7 +16,7 @@ export function canWrite(params: {
   chainId: number | undefined;
 }) {
   return Boolean(
-    params.isConnected && isOnTargetChain(params.chainId) && contractAddress
+    params.isConnected && isOnTargetChain(params.chainId) && contractsConfigured()
   );
 }
 
@@ -20,8 +25,8 @@ export function requireWriteReady(params: {
   chainId: number | undefined;
   setFormError: (message: string) => void;
 }): boolean {
-  if (!contractAddress) {
-    params.setFormError("Contract address is not configured.");
+  if (!contractsConfigured()) {
+    params.setFormError("NFT and marketplace addresses are not configured.");
     return false;
   }
   if (!params.isConnected) {

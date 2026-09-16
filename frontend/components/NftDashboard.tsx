@@ -4,97 +4,99 @@ import { useCallback, useState } from "react";
 import { useAccount } from "wagmi";
 import { ConnectWallet } from "@/components/ConnectWallet";
 import { WrongNetworkBanner } from "@/components/WrongNetworkBanner";
-import { MintCard, ApproveCard, SendCard, TokenCard, StatsCard } from "@/components/nft";
+import { ContractAddressStrip } from "@/components/nft/ContractAddressStrip";
+import { MarketGallery } from "@/components/nft/MarketGallery";
+import { StatsStrip } from "@/components/nft/StatsStrip";
+import { StudioCollection } from "@/components/nft/StudioCollection";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { contractAddress } from "@/lib/nft/contract";
-import { canWrite } from "@/lib/nft/gates";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { marketAddress } from "@/lib/market/contract";
+import { nftAddress } from "@/lib/nft/contract";
+import { canWrite, contractsConfigured } from "@/lib/nft/gates";
 import {
   useBalanceOf,
-  useGetApproved,
-  useOwnerOf,
-  useTotalMinted,
+  useMarketplaceEvents,
+  useMintedTokenIds,
+  useTokenCatalog,
 } from "@/lib/nft/hooks";
-import { parseTokenId } from "@/lib/nft/parse";
-import { shortenAddress } from "@/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function NftDashboard() {
   const { address, isConnected, chainId } = useAccount();
-  const [lookupInput, setLookupInput] = useState("");
-  const tokenId = parseTokenId(lookupInput);
+  const [selectedId, setSelectedId] = useState<bigint | undefined>(undefined);
 
-  const totalMinted = useTotalMinted();
+  const queryClient = useQueryClient();
+  const minted = useMintedTokenIds();
+  const catalog = useTokenCatalog(minted.data);
   const balance = useBalanceOf(address);
-  const ownerOf = useOwnerOf(tokenId);
-  const approved = useGetApproved(tokenId);
 
   const refetchReads = useCallback(() => {
-    void totalMinted.refetch();
+    void minted.refetch();
+    catalog.refetch();
     void balance.refetch();
-    void ownerOf.refetch();
-    void approved.refetch();
-  }, [approved, balance, ownerOf, totalMinted]);
+    void queryClient.invalidateQueries({ queryKey: ["balance"] });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- depend on refetch fns only
+  }, [minted.refetch, catalog.refetch, balance.refetch, queryClient]);
+
+  useMarketplaceEvents(refetchReads);
 
   const writeReady = canWrite({ isConnected, chainId });
+  const listedCount = catalog.records.filter((record) => record.listing?.listed)
+    .length;
+  const loading = minted.isLoading || catalog.isLoading;
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          {contractAddress ? (
-            <Badge variant="outline" className="font-mono">
-              Contract {shortenAddress(contractAddress)}
-            </Badge>
-          ) : null}
-        </div>
+        <ContractAddressStrip
+          nftAddress={nftAddress}
+          marketAddress={marketAddress}
+        />
         <ConnectWallet />
       </div>
       <WrongNetworkBanner />
-      {!contractAddress ? (
+      {!contractsConfigured() ? (
         <Alert variant="destructive">
-          <AlertTitle>App is not linked to a contract</AlertTitle>
+          <AlertTitle>App is not linked to the contracts</AlertTitle>
           <AlertDescription>
             Run ./start.sh from the project folder after Anvil is running. That
-            deploys the contract and fills in the frontend address.
+            deploys the NFT and marketplace and fills in the frontend addresses.
           </AlertDescription>
         </Alert>
       ) : (
         <>
-          <StatsCard
-            totalMinted={totalMinted.data}
-            totalMintedError={totalMinted.error}
-            balance={balance.data}
+          <StatsStrip
+            owned={balance.data}
+            listed={listedCount}
             connected={Boolean(address)}
+            address={address}
           />
-          <div className="grid gap-4 md:grid-cols-2">
-            <MintCard writeReady={writeReady} onSuccess={refetchReads} />
-            <TokenCard
-              lookupInput={lookupInput}
-              onLookupInputChange={setLookupInput}
-              tokenId={tokenId}
-              owner={ownerOf.data}
-              ownerError={ownerOf.error}
-              approved={approved.data}
-              approvedError={approved.error}
-            />
-            <ApproveCard
-              writeReady={writeReady}
-              onSuccess={refetchReads}
-              account={address}
-              lookupInput={lookupInput}
-              lookedUpTokenId={tokenId}
-              lookedUpOwner={ownerOf.data}
-            />
-            <SendCard
-              writeReady={writeReady}
-              onSuccess={refetchReads}
-              account={address}
-              lookupInput={lookupInput}
-              lookedUpTokenId={tokenId}
-              lookedUpOwner={ownerOf.data}
-              lookedUpApproved={approved.data}
-            />
-          </div>
+          <Tabs defaultValue="market">
+            <TabsList>
+              <TabsTrigger value="market">Market</TabsTrigger>
+              <TabsTrigger value="studio">Studio</TabsTrigger>
+            </TabsList>
+            <TabsContent value="market">
+              <MarketGallery
+                records={catalog.records}
+                writeReady={writeReady}
+                account={address}
+                onSuccess={refetchReads}
+                loading={loading}
+              />
+            </TabsContent>
+            <TabsContent value="studio">
+              <StudioCollection
+                records={catalog.records}
+                account={address}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                writeReady={writeReady}
+                onSuccess={refetchReads}
+                loading={loading}
+              />
+            </TabsContent>
+          </Tabs>
         </>
       )}
     </div>

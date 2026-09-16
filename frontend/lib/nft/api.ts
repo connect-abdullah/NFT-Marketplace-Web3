@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 import { targetChain } from "@/lib/wagmi";
-import { contractAbi, contractAddress } from "@/lib/nft/contract";
+import { nftAbi, nftAddress } from "@/lib/nft/contract";
 
 export function withContract<T extends { address: Address | undefined }>(
   call: T
@@ -12,20 +12,12 @@ export function withContract<T extends { address: Address | undefined }>(
 }
 
 const base = {
-  address: contractAddress,
-  abi: contractAbi,
+  address: nftAddress,
+  abi: nftAbi,
 } as const;
 
-/**
- * All contract call definitions live here (same idea as https.ts).
- * UI components should go through hooks, not duplicate function names.
- */
 export const nftApi = {
   reads: {
-    totalMinted: () => ({
-      ...base,
-      functionName: "totalMinted" as const,
-    }),
     ownerOf: (tokenId: bigint) => ({
       ...base,
       functionName: "ownerOf" as const,
@@ -41,6 +33,11 @@ export const nftApi = {
       functionName: "getApproved" as const,
       args: [tokenId] as const,
     }),
+    isApprovedForAll: (owner: Address, operator: Address) => ({
+      ...base,
+      functionName: "isApprovedForAll" as const,
+      args: [owner, operator] as const,
+    }),
   },
   writes: {
     mint: () => ({
@@ -52,6 +49,12 @@ export const nftApi = {
       ...base,
       functionName: "approve" as const,
       args: [to, tokenId] as const,
+      chainId: targetChain.id,
+    }),
+    setApprovalForAll: (operator: Address, approved: boolean) => ({
+      ...base,
+      functionName: "setApprovalForAll" as const,
+      args: [operator, approved] as const,
       chainId: targetChain.id,
     }),
     transferFrom: (from: Address, to: Address, tokenId: bigint) => ({

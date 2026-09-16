@@ -1,11 +1,11 @@
 import type { Abi, Address } from "viem";
 import { getAddress, isAddress } from "viem";
-import artifact from "@/abi/MyNft.json";
+import artifact from "@/abi/MarketNFT.json";
 
-export const contractAbi = artifact.abi as Abi;
+export const nftAbi = artifact.abi as Abi;
 
-const raw = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "";
+const raw = process.env.NEXT_PUBLIC_NFT_ADDRESS ?? "";
 
-export const contractAddress: Address | undefined = isAddress(raw)
+export const nftAddress: Address | undefined = isAddress(raw)
   ? getAddress(raw)
   : undefined;

@@ -1,7 +1,9 @@
-# Sample Hardhat 3 Project (minimal)
+# Backend
 
-This project has a minimal setup of Hardhat 3, without any plugins.
+Hardhat 3 project with two Solidity contracts: `MarketNFT` (custom ERC-721) and `NFTMarketplace`.
 
-## What's included?
+- `npm run compile` — compile `contracts/MarketNFT.sol` and `contracts/NFTMarketplace.sol`
+- `npm run deploy` — deploy both to the RPC in `.env` and write `NFT_ADDRESS` / `MARKET_ADDRESS` into backend/repo `.env` plus `frontend/.env.local`
+- `npm run cli` — interactive mint / approve marketplace / list / buy / transfer helper
 
-The project includes native support for TypeScript, Hardhat scripts, tasks, and support for Solidity compilation and tests.
+See the [root README](../README.md) for Anvil, env keys, and how the frontend syncs the ABI.
